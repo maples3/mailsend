@@ -1,0 +1,7 @@
+{
+    "smtp_server": "smtp.gmail.com:587",
+    "login_name": "your_gmail_account@gmail.com",
+    "password": "1234pass",
+    "from_address": "your_gmail_account@gmail.com",
+    "to_address": "whatever_email_you_want@example.com"
+}
