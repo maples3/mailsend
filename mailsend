@@ -9,76 +9,92 @@ from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-parser = argparse.ArgumentParser(description="yabs emailer")
+# Create the JSON example up here to make it more readable
+json_file_example = "Here is an example settings JSON file:"
+json_file_example += "\n"
+json_file_example += '{'
+json_file_example += "\n"
+json_file_example += '    "smtp_server": "smtp.gmail.com:587",'
+json_file_example += "\n"
+json_file_example += '    "login_name": "your_gmail_account@gmail.com",'
+json_file_example += "\n"
+json_file_example += '    "password": "1234pass",'
+json_file_example += "\n"
+json_file_example += '    "from_address": "your_gmail_account@gmail.com",'
+json_file_example += "\n"
+json_file_example += '    "to_address": "whatever_email_you_want@example.com"'
+json_file_example += "\n"
+json_file_example += '}'
+# ...and argparse messes with the newlines so it's still unreadable. :/
+
+parser = argparse.ArgumentParser(
+	description="A very simple email client for sending messages",
+	#epilog=json_file_example,
+	)
 parser.add_argument("-s", "--settings",
 	help="The email settings JSON file to use",
 	required=True,
-	dest="settings"
+	dest="settings",
+	type=argparse.FileType('r'),
 	)
 parser.add_argument("-S", "--subject",
 	help="The subject of the email",
 	default="(No subject)",
-	dest="subject"
+	dest="subject",
 	)
 parser.add_argument("-t", "--textfile",
 	help="The plain text file containing the message to send",
 	required=True,
-	dest="textfile"
+	dest="textfile",
+	type=argparse.FileType('r'),
 	)
 options = parser.parse_args()
 
-# Fix errors with relative paths and symlinks
-real_email_settings_file = os.path.abspath(options.settings)
+# Using argparse to handle file opening is nice :)
 
-# Send an email using the information in the email settings file and the
-#  message specified on the command line
+email_settings = json.load(options.settings)
+if not (
+		('smtp_server' in email_settings) and
+		('login_name' in email_settings) and
+		('password' in email_settings) and
+		('from_address' in email_settings) and
+		('to_address' in email_settings)
+	):
+	print("Error loading settings file!")
+	sys.exit(1)
+# Done with this file
+options.settings.close()
+
+# Everything's OK with the email settings, so go ahead and work on
+#  sending the message
+msg = MIMEMultipart()
+msg['From'] = email_settings['from_address']
+msg['To'] = email_settings['to_address']
+#msg['Date'] = formatdate(localtime=True)
+msg['Subject'] = options.subject
+
+# Attach the text file to the message
+msg.attach(MIMEText(options.textfile.read()))
+
+# Done with that file too
+options.textfile.close()
 
 email_sent = False
-if not os.path.isfile(real_email_settings_file):
-	# Email settings not found
-	print("Email settings file not found!")
-	sys.exit(1)
-else:
-	email_settings_reader = open(real_email_settings_file, mode="rt")
-	email_settings = json.load(email_settings_reader)
-	if not (
-			('smtp_server' in email_settings) and
-			('login_name' in email_settings) and
-			('password' in email_settings) and
-			('from_address' in email_settings) and
-			('to_address' in email_settings)
-		):
-		print("Error loading settings file!")
-		sys.exit(1)
-	else:
-		# Everything's OK with the email settings, so go ahead and work on
-		#  sending the message
-		msg = MIMEMultipart()
-		msg['From'] = email_settings['from_address']
-		msg['To'] = email_settings['to_address']
-		#msg['Date'] = formatdate(localtime=True)
-		msg['Subject'] = options.subject
-		
-		# Read the text file
-		with open(options.textfile, 'r') as infile:
-			message_text = infile.read()
-		# Attach it to the message
-		msg.attach(MIMEText(message_text))
-		
-		# Send the message
-		try:
-			smtp = smtplib.SMTP(email_settings['smtp_server'])
-			smtp.starttls()
-			smtp.login(email_settings['login_name'], email_settings['password'])
-			smtp.send_message(msg)
-			smtp.quit()
-			email_sent = True
-		except:
-			print("Error sending message!")
-			error_type, value, traceback = sys.exc_info()
-			print(value)
-			print(error_type)
-			print(traceback)
+
+# Send the message
+try:
+	smtp = smtplib.SMTP(email_settings['smtp_server'])
+	smtp.starttls()
+	smtp.login(email_settings['login_name'], email_settings['password'])
+	smtp.send_message(msg)
+	smtp.quit()
+	email_sent = True
+except:
+	print("Error sending message!")
+	error_type, value, traceback = sys.exc_info()
+	print(value)
+	print(error_type)
+	print(traceback)
 
 if not email_sent:
 	# Fail loudly and print the whole message.
