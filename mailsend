@@ -10,19 +10,25 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 parser = argparse.ArgumentParser(description="yabs emailer")
-parser.add_argument("email_settings",
-	help="The email_settings.json file to use.")
-parser.add_argument("-s", "--subject",
+parser.add_argument("-s", "--settings",
+	help="The email settings JSON file to use",
+	required=True,
+	dest="settings"
+	)
+parser.add_argument("-S", "--subject",
 	help="The subject of the email",
 	default="(No subject)",
-	dest="subject")
-parser.add_argument("-m", "--message",
-	help="The message to send",
+	dest="subject"
+	)
+parser.add_argument("-t", "--textfile",
+	help="The plain text file containing the message to send",
 	required=True,
-	dest="message")
+	dest="textfile"
+	)
 options = parser.parse_args()
 
-real_email_settings_file = os.path.abspath(options.email_settings)
+# Fix errors with relative paths and symlinks
+real_email_settings_file = os.path.abspath(options.settings)
 
 # Send an email using the information in the email settings file and the
 #  message specified on the command line
@@ -52,8 +58,14 @@ else:
 		msg['To'] = email_settings['to_address']
 		#msg['Date'] = formatdate(localtime=True)
 		msg['Subject'] = options.subject
-		msg.attach(MIMEText(options.message))
-
+		
+		# Read the text file
+		with open(options.textfile, 'r') as infile:
+			message_text = infile.read()
+		# Attach it to the message
+		msg.attach(MIMEText(message_text))
+		
+		# Send the message
 		try:
 			smtp = smtplib.SMTP(email_settings['smtp_server'])
 			smtp.starttls()
@@ -66,13 +78,14 @@ else:
 			error_type, value, traceback = sys.exc_info()
 			print(value)
 			print(error_type)
-			print(traceack)
+			print(traceback)
 
 if not email_sent:
-	# Fail loudly.
-	# If the email was not send, just print the message.
+	# Fail loudly and print the whole message.
 	# If this is being run in cron, then it will show up in the local mail
 	#  system, so at least it's recorded *somewhere*
+	# The error details were printed above, so all we need to worry about
+	#  now is printing the message.
 	print("Message subject: " + options.subject + "\n")
 	print("Message content:")
 	print(options.message)
